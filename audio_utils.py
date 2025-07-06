@@ -1,6 +1,7 @@
 import os
 from pydub import AudioSegment
 import numpy as np
+import shutil
 from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
 
 
@@ -31,20 +32,58 @@ def get_bpm(file_path):
         print(f"Failed BPM for {file_path}: {e}")
         return 0.0
 
-
-def process_folder(folder_path):
+def batch_analyze_bpm(folder_path, progress_callback=None):
     results = []
+    audio_extensions = ('.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg')
 
-    for file in os.listdir(folder_path):
+    files = [f for f in os.listdir(folder_path)
+             if os.path.isfile(os.path.join(folder_path, f)) and
+             os.path.splitext(f)[1].lower() in audio_extensions]
+
+    total = len(files)
+
+    for i, file in enumerate(files):
         file_path = os.path.join(folder_path, file)
-        if not os.path.isfile(file_path):
-            continue
 
-        mp3_path = convert_to_mp3(file_path)
-        if not mp3_path:
-            continue
-
-        bpm = get_bpm(mp3_path)
+        bpm = get_bpm(file_path)
         results.append((os.path.basename(file), bpm))
 
+        if progress_callback:
+            progress_callback(i + 1, total)
+
     return results
+
+
+
+def batch_convert_to_mp3(source_folder, progress_callback=None):
+    output_folder = os.path.join(source_folder, "converted_to_mp3")
+    os.makedirs(output_folder, exist_ok=True)
+
+    supported_extensions = (".mp3", ".wav", ".mp4", ".flac", ".m4a", ".aac", ".ogg")
+    files = [
+        f
+        for f in os.listdir(source_folder)
+        if os.path.isfile(os.path.join(source_folder, f))
+        and os.path.splitext(f)[1].lower() in supported_extensions
+    ]
+
+    total = len(files)
+
+    for i, file in enumerate(files):
+        file_path = os.path.join(source_folder, file)
+
+        try:
+            ext = os.path.splitext(file)[1].lower()
+            if ext == ".mp3":
+                shutil.copy(file_path, os.path.join(output_folder, file))
+            else:
+                audio = AudioSegment.from_file(file_path)
+                output_file = os.path.splitext(file)[0] + ".mp3"
+                output_path = os.path.join(output_folder, output_file)
+                audio.export(output_path, format="mp3")
+        except Exception as e:
+            print(f"Failed to process {file}: {e}")
+
+        # Update progress
+        if progress_callback:
+            progress_callback(i + 1, total)
